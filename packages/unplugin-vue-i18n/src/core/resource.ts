@@ -25,6 +25,9 @@ const INTLIFY_BUNDLE_IMPORT_ID = '@intlify/unplugin-vue-i18n/messages'
 // Use `virtual:` instead of Rollup's `\0` prefix — NUL bytes break WinAPI on Windows.
 // ref: https://github.com/intlify/bundle-tools/issues/595
 const VIRTUAL_PREFIX = 'virtual:'
+const RE_INTLIFY_BUNDLE_IMPORT_ID = /^@intlify\/unplugin-vue-i18n\/messages$/
+// the import id on webpack, and the virtual id on vite
+const RE_INTLIFY_BUNDLE_VIRTUAL_ID = /^(?:virtual:)?@intlify\/unplugin-vue-i18n\/messages$/
 const RE_RESOURCE_FORMAT = /\.(json5?|ya?ml|[c|m]?[j|t]s)$/
 const RE_SFC_I18N_CUSTOM_BLOCK = /\?vue&type=i18n/
 const RE_SFC_I18N_WEBPACK_CUSTOM_BLOCK = /blockType=i18n/
@@ -288,7 +291,9 @@ export function resourcePlugin(
       //  HMR for webpack
     },
 
+    // filters let the bundler skip the call for every other id
     resolveId: {
+      filter: { id: RE_INTLIFY_BUNDLE_IMPORT_ID },
       async handler(id: string) {
         if (id === INTLIFY_BUNDLE_IMPORT_ID) {
           return asVirtualId(id, meta.framework)
@@ -298,11 +303,8 @@ export function resourcePlugin(
       }
     },
 
-    loadInclude(id: string) {
-      return INTLIFY_BUNDLE_IMPORT_ID === getVirtualId(id, meta.framework)
-    },
-
     load: {
+      filter: { id: RE_INTLIFY_BUNDLE_VIRTUAL_ID },
       async handler(id: string) {
         debug('load', id)
         if (INTLIFY_BUNDLE_IMPORT_ID === getVirtualId(id, meta.framework) && include) {
