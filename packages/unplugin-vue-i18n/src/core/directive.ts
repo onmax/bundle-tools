@@ -1,6 +1,5 @@
 import { isBoolean } from '@intlify/shared'
 import { transformVTDirective } from '@intlify/vue-i18n-extensions'
-import { analyze as analyzeScope } from '@typescript-eslint/scope-manager'
 import type { AST_NODE_TYPES, parse, simpleTraverse } from '@typescript-eslint/typescript-estree'
 import createDebug from 'debug'
 import path from 'node:path'
@@ -8,7 +7,7 @@ import { checkVuePlugin, getVitePlugin, normalizePath, resolveNamespace } from '
 import { getDescriptor, getVuePluginOptions, parseVueRequest } from '../vue'
 
 import type { TranslationSignatureResolver } from '@intlify/vue-i18n-extensions'
-import type { Scope } from '@typescript-eslint/scope-manager'
+import type { analyze as analyzeScope, Scope } from '@typescript-eslint/scope-manager'
 import type {
   ParserServicesWithTypeInformation,
   TSESTree
@@ -23,11 +22,13 @@ const debug = createDebug(resolveNamespace('directive'))
 const tsEstree = {
   parse: undefined!,
   simpleTraverse: undefined!,
-  AST_NODE_TYPES: undefined!
+  AST_NODE_TYPES: undefined!,
+  analyzeScope: undefined!
 } as {
   parse: typeof parse
   simpleTraverse: typeof simpleTraverse
   AST_NODE_TYPES: typeof AST_NODE_TYPES
+  analyzeScope: typeof analyzeScope
 }
 export function directivePlugin({
   optimizeTranslationDirective,
@@ -43,12 +44,16 @@ export function directivePlugin({
     enforce: 'pre',
     vite: {
       async config(config) {
-        await import('@typescript-eslint/typescript-estree').then(r => {
-          tsEstree.parse = r.parse
-          tsEstree.simpleTraverse = r.simpleTraverse
-          tsEstree.AST_NODE_TYPES = r.AST_NODE_TYPES
-          return
-        })
+        await Promise.all([
+          import('@typescript-eslint/typescript-estree').then(r => {
+            tsEstree.parse = r.parse
+            tsEstree.simpleTraverse = r.simpleTraverse
+            tsEstree.AST_NODE_TYPES = r.AST_NODE_TYPES
+          }),
+          import('@typescript-eslint/scope-manager').then(r => {
+            tsEstree.analyzeScope = r.analyze
+          })
+        ])
 
         // @ts-expect-error -- TODO
         vuePlugin = getVitePlugin(config, 'vite:vue')
@@ -165,7 +170,7 @@ function analyzeIdentifiers(
       }
     }
   })
-  const scopeManager = analyzeScope(ast, { sourceType: 'module' })
+  const scopeManager = tsEstree.analyzeScope(ast, { sourceType: 'module' })
   const scope = getScope(scopeManager, ast)
 
   const importLocalName = getImportLocalName(scope, 'vue-i18n', 'useI18n')
